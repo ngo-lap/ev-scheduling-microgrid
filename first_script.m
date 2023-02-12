@@ -12,6 +12,7 @@
 %   1. Use the Simple Scheduler as the initial start
 %   2. Use assign for initial guess
 %   3. Play with the horizon time to reduce the number of variables
+%   (horizon ends at the last planned departure time)
 %   4. Sort the vehicles according to charging power 
 
 % TODO: 
@@ -22,9 +23,10 @@
 clc
 clear
 yalmip('clear')
-load('sample_pv_15min_daily.mat')
+annualPv = readtimetable('PV_CA.csv');
 
 %% Parameters
+
 timeStep = 900;     % sec
 horizonHours = 18;  % hour
 nSockets = 30;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
@@ -36,7 +38,7 @@ bigM = 1e6;
 socMin = 0.1;
 socMax = 0.9;
 efficiencyCharging = 0.85 * ones(1, nSockets);
-pCharging = sort(randi(25, [1, nSockets]));       % Max Charging Power of EVs [kW]
+pCharging = sort(randi([18, 25], [1, nSockets]), 'descend');       % Max Charging Power of EVs [kW]
 pDischarging = 0.9 * pCharging; % Max Discharging power of EVs [kW]
 cEV = 4 * pCharging;                    % Assuming battery of 4h (kWh)
 
@@ -46,16 +48,18 @@ cEV = 4 * pCharging;                    % Assuming battery of 4h (kWh)
 %       Same for tDue & tDeparture 
 %   2. Assume the horizon starts from 6 am
 
+% Input from users 
 tArrival = nTimeStepHourly * randi([2, 5], 1, nSockets);    % Arrival Time
 tDeparture = nTimeStepHourly * randi([10, 14], 1, nSockets);    % Departure Time
-
-socInit = socMin + (socMax - socMin) * rand(1, nSockets);    % init Soc between socMin & socMax
+socInit = socMin + (0.5 * socMax - socMin) * rand(1, nSockets);    % init Soc between socMin & socMax
 socDesired = 0.9 * ones(1, nSockets);
 
-% pLoad
-data.pLoad = zeros(nTimeStep, 1);   % kW
-% data.pPV = zeros(nTimeStep, 1);      % kW | data.pPV = readtimetable('PV_CA.csv'); data.pPV = -data.pPV.Var1(2:end);
-data.pPV = 0.2 * sample_pv_15min_daily(1:nTimeStep);
+% Profiles 
+data.pPV = - 0.2 * processPowerProfile( ...
+    annualPv, datetime('2022-06-01') + hours(startTime), ...
+    horizonHours, timeStep ...
+    );      % kW 
+data.pLoad = - 0.5 * max(data.pPV) * ones(nTimeStep, 1);   % kW
 data.pNetLoad = data.pPV + data.pLoad; 
 data.peakDemand = 100 * ones(nTimeStep, 1); 
 data.energyBuyPrice = 1 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
@@ -232,7 +236,7 @@ objFunc = ( ...
 
 %% Solving The problem 
 ops = sdpsettings('solver','intlinprog');
-ops.linprog.MaxTime = 20;
+ops.intlinprog.MaxTime = 20;
 
 % ops = sdpsettings();
 
@@ -252,7 +256,21 @@ end
 utilities
 
 %% Update Peak demand 
-
+% data.peakDemand = 90 * ones(nTimeStep, 1); 
+% Ctotal('6.1') = ( pSurPeakPos - pSurPeakNeg == data.peakDemand - pGrid ):'6.1';
+% 
+% % TODO: use initial solution/ warm start. 
+% dianostic = optimize(Ctotal, objFunc, ops);
+% 
+% if dianostic.problem == 0
+%     sdisplay(dianostic)
+%     disp('Objective Function: ')
+%     sdisplay(value(objFunc))
+% else    
+%     % For further error message, see 
+%     % https://yalmip.github.io/command/yalmiperror/
+%     warning('Error solving the problem')
+% end
 
 
 %% Constraints Verification Script 

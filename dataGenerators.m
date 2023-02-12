@@ -37,4 +37,3 @@ function demandPrice = generateDemandPrice( ...
     demandPrice = 10 * ones(nTimeStep, 1); 
     demandPrice( onPeakTranslated(1):(onPeakTranslated(2)-1) ) = 20;
 end
-
