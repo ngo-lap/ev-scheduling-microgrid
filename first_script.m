@@ -21,7 +21,9 @@ yalmip('clear')
 timeStep = 900;     % sec
 horizonHours = 18;  % hour
 nSockets = 30;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
-nTimeStep = horizonHours * 3600 / timeStep; 
+nTimeStepHourly = 3600 / timeStep;      % Number of time step per hour 
+nTimeStep = horizonHours * nTimeStepHourly; 
+
 bigM = 1e6; 
 
 socMin = 0.1;
@@ -37,8 +39,8 @@ cEV = 4 * pCharging;                    % Assuming battery of 4h (kWh)
 %       Same for tDue & tDeparture 
 %   2. Assume the horizon starts from 6 am
 
-tArrival = (3600 / timeStep) * randi([2, 5], 1, nSockets);    % Arrival Time
-tDeparture = (3600 / timeStep) * randi([10, 14], 1, nSockets);    % Departure Time
+tArrival = nTimeStepHourly * randi([2, 5], 1, nSockets);    % Arrival Time
+tDeparture = nTimeStepHourly * randi([10, 14], 1, nSockets);    % Departure Time
 
 socInit = socMin + (socMax - socMin) * rand(1, nSockets);    % init Soc between socMin & socMax
 socDesired = 0.9 * ones(1, nSockets);
@@ -48,8 +50,9 @@ data.pLoad = zeros(nTimeStep, 1);   % kW
 data.pPV = zeros(nTimeStep, 1);      % kW | data.pPV = readtimetable('PV_CA.csv'); data.pPV = -data.pPV.Var1(2:end);
 data.pNetLoad = data.pPV + data.pLoad; 
 data.peakDemand = 100 * ones(nTimeStep, 1); 
-data.energyBuyPrice = 1 * (timeStep / 3600) * ones(nTimeStep, 1);
-data.energySellPrice = 0 * (timeStep / 3600) * ones(nTimeStep, 1);
+data.energyBuyPrice = 1 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
+data.energySellPrice = 0 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
+data.demandBuyPrice = 10 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
 
 %% Problem Formulation - Variables
 
@@ -193,8 +196,8 @@ end
 
 
 %% C6 - Demand Peak 
-C6 = (pGrid <= data.peakDemand):'6';
-Ctotal = [Ctotal, C6];
+% C6 = (pGrid <= data.peakDemand):'6';
+% Ctotal = [Ctotal, C6];
 
 %% C7 - Socket Engagement 
 
@@ -204,6 +207,7 @@ objFunc = ( ...
     sum(data.energyBuyPrice' * pGridPos) ...
     - sum(data.energySellPrice' * pGridNeg) ...
     + sum(ev, 'all') ... 
+    + sum( data.demandBuyPrice' * (pGrid - data.peakDemand) ) ...
 );
 
 
@@ -227,6 +231,10 @@ end
 
 %% Post Processing
 utilities
+
+%% Update Peak demand 
+
+
 
 %% Constraints Verification Script 
 % Ctemp = C6('6'); 
