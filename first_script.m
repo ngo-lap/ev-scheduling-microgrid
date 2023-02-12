@@ -8,12 +8,18 @@
 %   * positive value (hence, P_PV≥0 always)
 %   * Row represents time step & columns represents vehicles 
 
-% Idea: 
+% Ideas: 
 %   1. Use the Simple Scheduler as the initial start
 %   2. Use assign for initial guess
 %   3. Play with the horizon time to reduce the number of variables
 %   (horizon ends at the last planned departure time)
 %   4. Sort the vehicles according to charging power 
+%   5. Solve the problem with a very high demand -> initial solution /
+%       heuristic peak (50% of the peak of this relaxed solution)
+%   6. Treating this as a constrained optimization problem, refer to 
+%       [ORTOOL](https://developers.google.com/optimization/cp/)
+%       1. Use this feasible solution as initial solution for the MILP to
+%       find the optimal solution
 
 % TODO: 
 %   1. Process sample PV profile (beginning time is 6am)
@@ -28,8 +34,8 @@ annualPv = readtimetable('PV_CA.csv');
 %% Parameters
 
 timeStep = 900;     % sec
-horizonHours = 18;  % hour
-nSockets = 30;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
+horizonHours = 15;  % hour
+nSockets = 150;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
 nTimeStepHourly = 3600 / timeStep;      % Number of time step per hour 
 nTimeStep = horizonHours * nTimeStepHourly;     % Horizon length (timesteps)
 startTime = 6;       % The horizon starts at 6am
@@ -55,13 +61,13 @@ socInit = socMin + (0.5 * socMax - socMin) * rand(1, nSockets);    % init Soc be
 socDesired = 0.9 * ones(1, nSockets);
 
 % Profiles 
-data.pPV = - 0.2 * processPowerProfile( ...
+data.pPV = -2 * processPowerProfile( ...
     annualPv, datetime('2022-06-01') + hours(startTime), ...
     horizonHours, timeStep ...
     );      % kW 
 data.pLoad = - 0.5 * max(data.pPV) * ones(nTimeStep, 1);   % kW
 data.pNetLoad = data.pPV + data.pLoad; 
-data.peakDemand = 100 * ones(nTimeStep, 1); 
+data.peakDemand = 0.25 * sum(pCharging) * ones(nTimeStep, 1); 
 data.energyBuyPrice = 1 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
 data.energySellPrice = 0 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
 data.demandBuyPrice = dataGenerators( ...
@@ -236,7 +242,7 @@ objFunc = ( ...
 
 %% Solving The problem 
 ops = sdpsettings('solver','intlinprog');
-ops.intlinprog.MaxTime = 20;
+ops.intlinprog.MaxTime = 10;
 
 % ops = sdpsettings();
 
