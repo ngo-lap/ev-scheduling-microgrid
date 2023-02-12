@@ -53,8 +53,8 @@ stairs( ...
     ); hold on 
 
 legend
-xlabel("kW")
-ylabel("Time")
+xlabel("Time")
+ylabel("kW")
 grid("on")
 
 %% Verification

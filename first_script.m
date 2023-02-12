@@ -64,9 +64,11 @@ pVehicle = sdpvar(nTimeStep, nSockets, 'full');     % Power for charging Vehicle
 socVehicle = sdpvar(nTimeStep, nSockets, 'full');   % SoC for Vehicles 
 
 % Grid
-pGrid = sdpvar(nTimeStep, 1, 'full');       % Power extracted from grid [kW]
-pGridPos = sdpvar(nTimeStep, 1, 'full');    % Positive Grid Power 
-pGridNeg = sdpvar(nTimeStep, 1, 'full');    % Negative Grid Power
+pGrid = sdpvar(nTimeStep, 1);       % Power extracted from grid [kW]
+pGridPos = sdpvar(nTimeStep, 1);    % Positive Grid Power 
+pGridNeg = sdpvar(nTimeStep, 1);    % Negative Grid Power
+pSurPeakPos = sdpvar(nTimeStep, 1); % Positive Sur Peak Power 
+pSurPeakNeg = sdpvar(nTimeStep, 1); % Positive Sur Peak 
 
 %% Problem Formulation - Constraints 
 
@@ -201,6 +203,13 @@ end
 % C6 = (pGrid <= data.peakDemand):'6';
 % Ctotal = [Ctotal, C6];
 
+C6 = [
+    ( pSurPeakPos - pSurPeakNeg == data.peakDemand - pGrid ):'6.1', 
+    ( pSurPeakPos >= 0 ):'6.2', 
+    ( pSurPeakNeg >= 0 ):'6.3' ... 
+    ];
+Ctotal = [Ctotal, C6];
+
 %% C7 - Socket Engagement 
 
 %% Objective Function 
@@ -209,7 +218,7 @@ objFunc = ( ...
     sum(data.energyBuyPrice' * pGridPos) ...
     - sum(data.energySellPrice' * pGridNeg) ...
     + sum(ev, 'all') ... 
-    + sum( data.demandBuyPrice' * (pGrid - data.peakDemand) ) ...
+    + sum( data.demandBuyPrice' * pSurPeakNeg ) ...
 );
 
 
