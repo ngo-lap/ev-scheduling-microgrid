@@ -5,6 +5,7 @@ socMatrix = value(socVehicle);
 timeMatrix = zeros(size(socMatrix));    % Arrival & departure indicators
 timeMatrix(sub2ind(size(socMatrix), tArrival, 1:nSockets)) = 0.5;
 timeMatrix(sub2ind(size(socMatrix), tDeparture, 1:nSockets)) = -0.5;
+pVehicleMatrix = value(pVehicle);
 
 % SoC
 figure
@@ -31,7 +32,8 @@ colormap('jet')
 figure
 heatmap(value(pVehicle), 'XLabel', 'Vehicles', 'YLabel', 'Time (t)', 'Title', 'pVehicle')
 
-% h = bar3(socMatrix); 
+
+figure; bar(pVehicleMatrix,'stacked','DisplayName','pVehicleMatrix')
 
 % Timelines 
 

@@ -12,10 +12,17 @@
 %   1. Use the Simple Scheduler as the initial start
 %   2. Use assign for initial guess
 %   3. Play with the horizon time to reduce the number of variables
+%   4. Sort the vehicles according to charging power 
+
+% TODO: 
+%   1. Process sample PV profile (beginning time is 6am)
+%   2. Process the warning of ev not activate but pVehicle is still
+%       positive
 
 clc
 clear
 yalmip('clear')
+load('sample_pv_15min_daily.mat')
 
 %% Parameters
 timeStep = 900;     % sec
@@ -29,7 +36,7 @@ bigM = 1e6;
 socMin = 0.1;
 socMax = 0.9;
 efficiencyCharging = 0.85 * ones(1, nSockets);
-pCharging = randi(25, [1, nSockets]);       % Max Charging Power of EVs [kW]
+pCharging = sort(randi(25, [1, nSockets]));       % Max Charging Power of EVs [kW]
 pDischarging = 0.9 * pCharging; % Max Discharging power of EVs [kW]
 cEV = 4 * pCharging;                    % Assuming battery of 4h (kWh)
 
@@ -47,7 +54,8 @@ socDesired = 0.9 * ones(1, nSockets);
 
 % pLoad
 data.pLoad = zeros(nTimeStep, 1);   % kW
-data.pPV = zeros(nTimeStep, 1);      % kW | data.pPV = readtimetable('PV_CA.csv'); data.pPV = -data.pPV.Var1(2:end);
+% data.pPV = zeros(nTimeStep, 1);      % kW | data.pPV = readtimetable('PV_CA.csv'); data.pPV = -data.pPV.Var1(2:end);
+data.pPV = 0.2 * sample_pv_15min_daily(1:nTimeStep);
 data.pNetLoad = data.pPV + data.pLoad; 
 data.peakDemand = 100 * ones(nTimeStep, 1); 
 data.energyBuyPrice = 1 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
