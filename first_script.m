@@ -22,8 +22,8 @@ timeStep = 900;     % sec
 horizonHours = 18;  % hour
 nSockets = 30;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
 nTimeStepHourly = 3600 / timeStep;      % Number of time step per hour 
-nTimeStep = horizonHours * nTimeStepHourly; 
-
+nTimeStep = horizonHours * nTimeStepHourly;     % Horizon length (timesteps)
+startTime = 6;       % The horizon starts at 6am
 bigM = 1e6; 
 
 socMin = 0.1;
@@ -52,7 +52,9 @@ data.pNetLoad = data.pPV + data.pLoad;
 data.peakDemand = 100 * ones(nTimeStep, 1); 
 data.energyBuyPrice = 1 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
 data.energySellPrice = 0 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
-data.demandBuyPrice = 10 * (1 / nTimeStepHourly) * ones(nTimeStep, 1);
+data.demandBuyPrice = dataGenerators( ...
+    'demand', startTime, [12, 15], timeStep, horizonHours ...
+    );
 
 %% Problem Formulation - Variables
 
