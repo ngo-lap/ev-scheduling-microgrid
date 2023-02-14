@@ -22,9 +22,8 @@
 %       find the optimal solution
 
 % TODO: 
-%   1. Process sample PV profile (beginning time is 6am)
-%   2. Process the warning of ev not activate but pVehicle is still
-%       positive
+%   1. Why adding +sum(ev) in the objective function solves a lot quicker
+%         A: possibly since we force them to be 0 initially
 
 clc
 clear
@@ -123,21 +122,17 @@ C31 = [];
 for v = 1 : nSockets
     C31 = [
         C31, 
-        ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.1' int2str(v)] 
-        ( 1 * ev(:, v) * pCharging(v) <= -pVehicle(:, v) <= pCharging(v) ):['3.1.2' int2str(v)]
-        ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.3' int2str(v)]
+        ( pCharging(v) * ev(:, v) + pVehicle(:, v) == 0 ):['3.1.1' int2str(v)] 
         ];
 end
 
-% C3.1 Charging Variable Binding: -pVehicle = pCharging * ev
-% If we go for fix power, then we have modify the socMax constraint for
-% feasibility
+% Variable Charging with a minimum threshold - bigM method
 % for v = 1 : nSockets
 %     C31 = [
 %         C31, 
-%         ( 2 * pCharging(v) * ev(:, v) + pVehicle(:, v) == 0):['3.1.1' int2str(v)] ...
-%         ( (bigM * ev(tDeparture(v), v) + pVehicle(tDeparture(v), v) >= 0) ):['3.1.2' int2str(v)]... 
-%         ( -pVehicle(tDeparture(v), v) <= pCharging(v) ):['3.1.3' int2str(v)]
+%         ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.1' int2str(v)] 
+%         ( 1 * ev(:, v) * pCharging(v) <= -pVehicle(:, v) <= pCharging(v) ):['3.1.2' int2str(v)]
+%         ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.3' int2str(v)]
 %         ];
 % end
 
