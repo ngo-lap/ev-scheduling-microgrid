@@ -35,7 +35,7 @@ annualPv = readtimetable('PV_CA.csv');
 
 timeStep = 900;     % sec
 horizonHours = 15;  % hour
-nSockets = 150;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
+nSockets = 50;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
 nTimeStepHourly = 3600 / timeStep;      % Number of time step per hour 
 nTimeStep = horizonHours * nTimeStepHourly;     % Horizon length (timesteps)
 startTime = 6;       % The horizon starts at 6am
@@ -61,7 +61,7 @@ socInit = socMin + (0.5 * socMax - socMin) * rand(1, nSockets);    % init Soc be
 socDesired = 0.9 * ones(1, nSockets);
 
 % Profiles 
-data.pPV = -2 * processPowerProfile( ...
+data.pPV = -1 * processPowerProfile( ...
     annualPv, datetime('2022-06-01') + hours(startTime), ...
     horizonHours, timeStep ...
     );      % kW 
@@ -183,23 +183,14 @@ C52 = ( socVehicle(1, :) == socInit ):'5.2';
 Ctotal = [Ctotal, C52]; 
 
 
-%% C5.3 - Desired SoC: soc(tDeparture(v), v) = socDesired(v)
+%% C5.3 - Desired SoC: soc(tDeparture(v), v) >= socDesired(v)
 % With this hard constrained, then the cost of tardiness is no longer
 % necessary.
 % TODO: replace this hard constraint later
 
 C53 = ( ...
     socVehicle(sub2ind(size(socVehicle), tDeparture, 1:nSockets)) ...   % extract from subscript
-    == socDesired ):'5.3';
-
-assert( ...
-    all( ...
-        getvariables( ...
-            socVehicle(sub2ind(size(socVehicle), tDeparture, 1:nSockets))' ...
-    ) ...
-        == getvariables(C53('5.3')) ...
-        ) ...
-    , 'Incorrect variable used.')
+    >= socDesired ):'5.3';
 
 Ctotal = [Ctotal, C53];
 
@@ -211,7 +202,7 @@ for v = 1 : nSockets
     C54 = [C54, 
         ( ...
         socVehicle(:, v) ...
-        <= min(socMax, socDesired(v)) ...
+        <= socMax ...
         ):['5.4.max.' int2str(v)] 
         ];
 end
@@ -241,8 +232,12 @@ objFunc = ( ...
 
 
 %% Solving The problem 
-ops = sdpsettings('solver','intlinprog');
-ops.intlinprog.MaxTime = 10;
+ops = sdpsettings( ...
+    'solver','intlinprog', 'showprogress', true, 'savesolveroutput', true ...
+    );
+% This gap makes all the difference in solving time here
+ops.intlinprog.RelativeGapTolerance = 1e-2;     
+ops.intlinprog.MaxTime = 20;
 
 % ops = sdpsettings();
 
@@ -257,6 +252,18 @@ else
     % https://yalmip.github.io/command/yalmiperror/
     warning('Error solving the problem')
 end
+
+%% Use initial guess 
+% (INTLINPROG) does not support warm-starts through YALMIP
+
+% assign(ev, value(ev));
+% assign(pVehicle, value(pVehicle));
+% assign(socVehicle, value(socVehicle));
+% assign(pGrid, value(pGrid));
+% assign(pGridPos, value(pGridPos));
+% assign(pGridNeg, value(pGridNeg));
+% assign(pSurPeakPos, value(pSurPeakPos));
+% assign(pSurPeakNeg, value(pSurPeakNeg));
 
 %% Post Processing
 utilities
