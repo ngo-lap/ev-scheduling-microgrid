@@ -35,14 +35,14 @@ annualPv = readtimetable('PV_CA.csv');
 
 timeStep = 900;     % sec
 horizonHours = 15;  % hour
-nSockets = 50;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
+nSockets = 10;  % Nbr of Sockets of Chargers = Nbr of Vehicles considered.
 nTimeStepHourly = 3600 / timeStep;      % Number of time step per hour 
 nTimeStep = horizonHours * nTimeStepHourly;     % Horizon length (timesteps)
 startTime = 6;       % The horizon starts at 6am
 bigM = 1e6; 
 
-socMin = 0.1;
-socMax = 0.9;
+socMin = 0.01;
+socMax = 0.99;
 efficiencyCharging = 0.85 * ones(1, nSockets);
 pCharging = sort(randi([18, 25], [1, nSockets]), 'descend');       % Max Charging Power of EVs [kW]
 pDischarging = 0.9 * pCharging; % Max Discharging power of EVs [kW]
@@ -59,9 +59,10 @@ tArrival = nTimeStepHourly * randi([2, 5], 1, nSockets);    % Arrival Time
 tDeparture = nTimeStepHourly * randi([10, 14], 1, nSockets);    % Departure Time
 socInit = socMin + (0.5 * socMax - socMin) * rand(1, nSockets);    % init Soc between socMin & socMax
 socDesired = 0.9 * ones(1, nSockets);
+tardinessCost = 150 * ones(1, nSockets);
 
 % Profiles 
-data.pPV = -1 * processPowerProfile( ...
+data.pPV = -0.1 * processPowerProfile( ...
     annualPv, datetime('2022-06-01') + hours(startTime), ...
     horizonHours, timeStep ...
     );      % kW 
@@ -80,6 +81,8 @@ data.demandBuyPrice = dataGenerators( ...
 ev = binvar(nTimeStep, nSockets, 'full');   % ev(v, t) = 1 if ev number v is charged at time t, 0 otherwise 
 pVehicle = sdpvar(nTimeStep, nSockets, 'full');     % Power for charging Vehicles 
 socVehicle = sdpvar(nTimeStep, nSockets, 'full');   % SoC for Vehicles 
+socUnderChargedPos = sdpvar(1, nSockets);  % Positive soc over socDesired at departure
+socUnderChargedNeg = sdpvar(1, nSockets);  % Negative soc over socDesired at departure
 
 % Grid
 pGrid = sdpvar(nTimeStep, 1);       % Power extracted from grid [kW]
@@ -120,8 +123,9 @@ C31 = [];
 for v = 1 : nSockets
     C31 = [
         C31, 
-        ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.1' int2str(v)], 
-        ( -pVehicle(:, v) <= pCharging(v) ):['3.1.2' int2str(v)]
+        ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.1' int2str(v)] 
+        ( 1 * ev(:, v) * pCharging(v) <= -pVehicle(:, v) <= pCharging(v) ):['3.1.2' int2str(v)]
+        ( bigM * ev(:, v) + pVehicle(:, v) >= 0 ):['3.1.3' int2str(v)]
         ];
 end
 
@@ -131,7 +135,9 @@ end
 % for v = 1 : nSockets
 %     C31 = [
 %         C31, 
-%         (pCharging(v) * ev(:, v) + pVehicle(:, v) == 0):['3.1.' int2str(v)]
+%         ( 2 * pCharging(v) * ev(:, v) + pVehicle(:, v) == 0):['3.1.1' int2str(v)] ...
+%         ( (bigM * ev(tDeparture(v), v) + pVehicle(tDeparture(v), v) >= 0) ):['3.1.2' int2str(v)]... 
+%         ( -pVehicle(tDeparture(v), v) <= pCharging(v) ):['3.1.3' int2str(v)]
 %         ];
 % end
 
@@ -150,6 +156,7 @@ end
 Ctotal = [Ctotal, C32];
 
 %% C4 - Maximum Sockets Occupation: sum_{v}(ev(t, v) <= nSockets)
+% TODO: play with this 
 
 C4 = []; 
 for t = 1:nTimeStep
@@ -188,15 +195,25 @@ Ctotal = [Ctotal, C52];
 % necessary.
 % TODO: replace this hard constraint later
 
-C53 = ( ...
+% C53 = ( ...
+%     socVehicle(sub2ind(size(socVehicle), tDeparture, 1:nSockets)) ...   % extract from subscript
+%     >= socDesired ):'5.3';
+
+C53 = [
+    ( ...
     socVehicle(sub2ind(size(socVehicle), tDeparture, 1:nSockets)) ...   % extract from subscript
-    >= socDesired ):'5.3';
+    - socDesired ...
+    == socUnderChargedPos - socUnderChargedNeg):'5.3.1'
+    ( socUnderChargedPos >= 0 ):'5.3.2'
+    ( socUnderChargedNeg >= 0 ):'5.3.3'
+];
+% socUnderChargedPos = socVehicle - socDesired + socUnderChargedNeg >= 0
 
 Ctotal = [Ctotal, C53];
 
 %% C5.4 SoC Bouds: 
 % socVehicle(t, v) >= socMin, 
-% socVehicle(t, v) <= min(socMax, socDesired(v))
+% socVehicle(t, v) <= socMax
 C54 = [ ( socVehicle >= socMin ):'5.4.min' ];
 for v = 1 : nSockets
     C54 = [C54, 
@@ -208,7 +225,8 @@ for v = 1 : nSockets
 end
 
 
-%% C6 - Demand Peak 
+%% C6 - Demand Peak: pSurPeakPos == (peak - pGrid) + pSurPeakNeg >= 0
+
 % C6 = (pGrid <= data.peakDemand):'6';
 % Ctotal = [Ctotal, C6];
 
@@ -228,6 +246,7 @@ objFunc = ( ...
     - sum(data.energySellPrice' * pGridNeg) ...
     + sum(ev, 'all') ... 
     + sum( data.demandBuyPrice' * pSurPeakNeg ) ...
+    + sum( tardinessCost * socUnderChargedNeg' ) ...
 );
 
 
