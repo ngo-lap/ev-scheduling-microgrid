@@ -38,7 +38,7 @@ figure; bar(pVehicleMatrix,'stacked','DisplayName','pVehicleMatrix')
 
 % Timelines 
 
-% Power Profiles 
+%% Power Profiles 
 figure
 stairs( ...
     1:nTimeStep, value(pGrid), ...
@@ -51,14 +51,28 @@ stairs( ...
     ); hold on 
 
 stairs( ...
-    1:nTimeStep, sum(value(pVehicle), 2), ...
+    1:nTimeStep, -sum(value(pVehicle), 2), ...
     'Color', 'g', 'LineWidth', 1 , 'DisplayName', 'Vehicles' ...
     ); hold on 
+
+stairs( ...
+    1:nTimeStep, data.peakDemand, ...
+    'Color', 'k', 'LineWidth', 1 , 'DisplayName', 'Peak Level', ...
+    'LineStyle', '-.'); hold on 
 
 legend
 xlabel("Time")
 ylabel("kW")
 grid("on")
+
+demandPriceIdx = find(diff(data.demandBuyPrice) ~= 0);
+
+for idx = 1 : size(demandPriceIdx)
+    xline(demandPriceIdx(idx), '--'); hold on
+end
+
+
+
 
 %% Verification
 
@@ -92,13 +106,15 @@ assert(all(socMatrix(1, :) == socInit), 'SoC Init not correct')
 %     , 'Incorrect variable used.')
 
 %% Information 
-
+peakMaxScenario = sum(pCharging) - max(data.pNetLoad); % Peak in Max Scenario
 nBinaryVars = yalmip('binvariables');       % Vector of binary variables
 nVars = yalmip('nvars');                    % Vecor of variables
 fprintf("Number of variables: %i \n", nVars)
 fprintf("Number of binary variables: %i \n", size(nBinaryVars, 2));
 fprintf("If all vehicles are charged at the same time, the peak " + ...
     "would be %i kW \n", sum(pCharging));
+fprintf("Peak in Max Scenario would be %i kW.\n", round(peakMaxScenario));
+
 %%
 if ~isempty(find(round(sum(value(ev), 1)) == 0))
     warning("There are vehicles which are not charged in the " + ...

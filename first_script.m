@@ -24,7 +24,8 @@
 % TODO: 
 %   1. Why adding +sum(ev) in the objective function solves a lot quicker
 %         A: possibly since we force them to be 0 initially
-
+%   2. Why are the EV charged during On Peak if we have surplus PV?    
+%   3. Test Scenarios: Shortage of PV, Comparable PV and EV Load
 clc
 clear
 yalmip('clear')
@@ -150,7 +151,7 @@ end
 
 Ctotal = [Ctotal, C32];
 
-%% C4 - Maximum Sockets Occupation: sum_{v}(ev(t, v) <= nSockets)
+% C4 - Maximum Sockets Occupation: sum_{v}(ev(t, v) <= nSockets)
 % TODO: play with this 
 
 C4 = []; 
@@ -160,7 +161,7 @@ end
 
 Ctotal = [Ctotal, C4]; 
 
-%% C5.1 - SoC: 
+% C5.1 - SoC: 
 % soc(t+1, v) == -eff(v) * (timeStep / 3600) * pVehicle(t, v) / c(v) + soc(t, v)
 
 C51 = []; 
@@ -178,14 +179,14 @@ end
 
 Ctotal = [Ctotal, C51]; 
 
-%% C5.2 - Initial SoC: soc(1, v) = socInit(v)
+% C5.2 - Initial SoC: soc(1, v) = socInit(v)
 % This one has to stand alone so that it would be updated @ every iteration
 
 C52 = ( socVehicle(1, :) == socInit ):'5.2';
 Ctotal = [Ctotal, C52]; 
 
 
-%% C5.3 - Desired SoC: soc(tDeparture(v), v) >= socDesired(v)
+% C5.3 - Desired SoC: soc(tDeparture(v), v) >= socDesired(v)
 % With this hard constrained, then the cost of tardiness is no longer
 % necessary.
 % TODO: replace this hard constraint later
@@ -206,9 +207,8 @@ C53 = [
 
 Ctotal = [Ctotal, C53];
 
-%% C5.4 SoC Bouds: 
-% socVehicle(t, v) >= socMin, 
-% socVehicle(t, v) <= socMax
+% C5.4 SoC Bouds: 
+% socVehicle(t, v) >= socMin, socVehicle(t, v) <= socMax
 C54 = [ ( socVehicle >= socMin ):'5.4.min' ];
 for v = 1 : nSockets
     C54 = [C54, 
@@ -218,9 +218,10 @@ for v = 1 : nSockets
         ):['5.4.max.' int2str(v)] 
         ];
 end
+Ctotal = [Ctotal, C54];
 
 
-%% C6 - Demand Peak: pSurPeakPos == (peak - pGrid) + pSurPeakNeg >= 0
+% C6 - Demand Peak: pSurPeakPos == (peak - pGrid) + pSurPeakNeg >= 0
 
 % C6 = (pGrid <= data.peakDemand):'6';
 % Ctotal = [Ctotal, C6];
@@ -232,20 +233,20 @@ C6 = [
     ];
 Ctotal = [Ctotal, C6];
 
-%% C7 - Socket Engagement 
+% C7 - Socket Engagement 
 
 %% Objective Function 
 
 objFunc = ( ...
-    sum(data.energyBuyPrice' * pGridPos) ...
-    - sum(data.energySellPrice' * pGridNeg) ...
-    + sum(ev, 'all') ... 
+    sum(data.energyBuyPrice' * pGridPos) / nTimeStepHourly ...
+    - sum(data.energySellPrice' * pGridNeg) / nTimeStepHourly ...
+    - sum(ev, 'all') ... 
     + sum( data.demandBuyPrice' * pSurPeakNeg ) ...
     + sum( tardinessCost * socUnderChargedNeg' ) ...
 );
 
 
-%% Solving The problem 
+% Solving The problem 
 ops = sdpsettings( ...
     'solver','intlinprog', 'showprogress', true, 'savesolveroutput', true ...
     );
@@ -267,6 +268,8 @@ else
     warning('Error solving the problem')
 end
 
+utilities
+
 %% Use initial guess 
 % (INTLINPROG) does not support warm-starts through YALMIP
 
@@ -280,7 +283,7 @@ end
 % assign(pSurPeakNeg, value(pSurPeakNeg));
 
 %% Post Processing
-utilities
+% utilities
 
 %% Update Peak demand 
 % data.peakDemand = 90 * ones(nTimeStep, 1); 

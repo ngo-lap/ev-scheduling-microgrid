@@ -11,10 +11,14 @@ function [ profileArray, profileTimetable ] = processPowerProfile( ...
     range2extract = timerange( ...
         datetime(startTime), ...
         datetime(startTime) + hours(horizonHours), ...
-        'openright' ...
+        'closedright' ...
         );
     
-    originalTimeStep = dataAnnual.Properties.TimeStep;
+    if isnan(dataAnnual.Properties.TimeStep)
+        originalTimeStep = seconds(900);
+    else
+        originalTimeStep = dataAnnual.Properties.TimeStep;
+    end
     newTimeStep = seconds(timeStep);
 
     if originalTimeStep < newTimeStep 
@@ -22,14 +26,22 @@ function [ profileArray, profileTimetable ] = processPowerProfile( ...
             dataAnnual(range2extract, :), 'regular', 'mean', ...
             'TimeStep', newTimeStep ...
             );
+        profileArray = profileTimetable.Variables;
+
     elseif originalTimeStep > newTimeStep
         profileTimetable = retime( ...
             dataAnnual(range2extract, :), 'regular', 'previous', ...
             'TimeStep', newTimeStep ...
             );
+
+        % The first time stamp is omitted in retime
+        profileArray = profileTimetable.Variables;
+        profileArray = [profileArray(1); profileArray]; 
+
     else
         profileTimetable = dataAnnual(range2extract, :);
+        profileArray = profileTimetable.Variables;
     end
     
-    profileArray = profileTimetable.Variables;
+
 end
